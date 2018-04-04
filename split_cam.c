@@ -9,6 +9,9 @@
  *
  * Author: Aadil Rizvi
  * Date Created: 11/25/2016
+ *
+ * Modified by: Balagopal Nair
+ * Date modified: 04/04/2018
 */
 
 #include <stdio.h>
@@ -21,6 +24,7 @@
 #include <unistd.h>
 #include <stropts.h>
 #include <signal.h>
+#include <time.h>
 
 #define MAX_FILENAME_SIZE 100
 
@@ -45,6 +49,11 @@ int main(void) {
   int nBytes;
   char filename[MAX_FILENAME_SIZE];
   struct timeval ts;  
+  double newFileInterval = 900;
+  time_t start,end;
+  time(&start);
+  double elapsedTime = 0;
+
 
   // Register signal handler
   signal(SIGINT, sig_handler);
@@ -56,7 +65,7 @@ int main(void) {
   gettimeofday(&ts, NULL);
 
   // Generate filename
-  snprintf(filename, MAX_FILENAME_SIZE, "raspiVid-%u-%u.h264", ts.tv_sec, ts.tv_usec);
+  snprintf(filename, MAX_FILENAME_SIZE, "/media/mycloud/zerocam/front/raspiVid-%u-%u.h264", ts.tv_sec, ts.tv_usec);
 
   // Open file to write data
   fd_out = open(filename, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
@@ -68,7 +77,28 @@ int main(void) {
   // while writing data to file and
   // stdout as well
   while(nBytes > 0) {
+    
+    if (elapsedTime > newFileInterval) {
+	//printf("SPLITTER: Getting new file...\n");
+        if (fd_out >= 0) {    
+            // Flush all write queues
+            ioctl(fd_out, I_FLUSH, FLUSHW);
+    
+            // Close data file
+            close(fd_out);
+        }
+	//Reset elapsed time
+        elapsedTime = 0;
+        time(&start);
 
+	// Generate new filename and open the file
+        fd_out = -1;
+        gettimeofday(&ts, NULL);
+        snprintf(filename, MAX_FILENAME_SIZE, "/media/mycloud/zerocam/front/raspiVid-%u-%u.h264", ts.tv_sec, ts.tv_usec);
+	//printf(filename);
+        fd_out = open(filename, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+       	
+    }
     // Write data to file
     write(fd_out, (const void*)in_array, nBytes);
 
@@ -77,9 +107,13 @@ int main(void) {
 
     // Flush all write queues
     ioctl(fd_out, I_FLUSH, FLUSHW);
+    time(&end);
+    elapsedTime = difftime(end,start);
+    //printf("SPLITTER: ELAPSED %d start %d end %d \n", elapsedTime,start,end);   
 
     // Read next available chunk of data from stdin
     nBytes = read(STDIN_FILENO, in_array, sizeof(in_array)); 
+
   }
 
   // Close data file
